@@ -47,6 +47,23 @@ void FastText::saveVectors() {
   ofs.close();
 }
 
+void FastText::saveOutput() {
+  std::ofstream ofs(args_->output + ".output");
+  if (!ofs.is_open()) {
+    std::cout << "Error opening file for saving vectors." << std::endl;
+    exit(EXIT_FAILURE);
+  }
+  ofs << dict_->nwords() << " " << args_->dim << std::endl;
+  Vector vec(args_->dim);
+  for (int32_t i = 0; i < dict_->nwords(); i++) {
+    std::string word = dict_->getWord(i);
+    vec.zero();
+    vec.addRow(*output_, i);
+    ofs << word << " " << vec << std::endl;
+  }
+  ofs.close();
+}
+
 void FastText::saveModel() {
   std::ofstream ofs(args_->output + ".bin", std::ofstream::binary);
   if (!ofs.is_open()) {
@@ -215,6 +232,20 @@ void FastText::wordVectors() {
   }
 }
 
+void FastText::ngramVectors(std::string word) {
+  std::vector<int32_t> ngrams;
+  std::vector<std::string> substrings;
+  Vector vec(args_->dim);
+  dict_->getNgrams(word, ngrams, substrings);
+  for (int32_t i = 0; i < ngrams.size(); i++) {
+    vec.zero();
+    if (ngrams[i] >= 0) {
+      vec.addRow(*input_, ngrams[i]);
+    }
+    std::cout << substrings[i] << " " << vec << std::endl;
+  }
+}
+
 void FastText::textVectors() {
   std::vector<int32_t> line, labels;
   Vector vec(args_->dim);
@@ -365,6 +396,9 @@ void FastText::train(std::shared_ptr<Args> args) {
   saveModel();
   if (args_->model != model_name::sup) {
     saveVectors();
+    if (args_->saveOutput > 0) {
+      saveOutput();
+    }
   }
 }
 
