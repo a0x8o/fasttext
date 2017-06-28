@@ -25,7 +25,7 @@ namespace fasttext {
 
 FastText::FastText() : quant_(false) {}
 
-void FastText::getVector(Vector& vec, const std::string& word) {
+void FastText::getVector(Vector& vec, const std::string& word) const {
   const std::vector<int32_t>& ngrams = dict_->getNgrams(word);
   vec.zero();
   for (auto it = ngrams.begin(); it != ngrams.end(); ++it) {
@@ -639,6 +639,10 @@ void FastText::train(std::shared_ptr<Args> args) {
       saveOutput();
     }
   }
+}
+
+int FastText::getDimension() const {
+    return args_->dim;
 }
 
 }
