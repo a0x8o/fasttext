@@ -78,14 +78,14 @@ void printPrintNgramsUsage() {
     << std::endl;
 }
 
-void quantize(const std::vector<std::string>& args) {
+void quantize(int argc, char** argv) {
   std::shared_ptr<Args> a = std::make_shared<Args>();
-  if (args.size() < 3) {
+  if (argc < 3) {
     printQuantizeUsage();
     a->printHelp();
     exit(EXIT_FAILURE);
   }
-  a->parseArgs(args);
+  a->parseArgs(argc, argv);
   FastText fasttext;
   fasttext.quantize(a);
   exit(0);
@@ -107,20 +107,20 @@ void printAnalogiesUsage() {
     << std::endl;
 }
 
-void test(const std::vector<std::string>& args) {
-  if (args.size() < 4 || args.size() > 5) {
+void test(int argc, char** argv) {
+  if (argc < 4 || argc > 5) {
     printTestUsage();
     exit(EXIT_FAILURE);
   }
   int32_t k = 1;
-  if (args.size() >= 5) {
-    k = std::stoi(args[4]);
+  if (argc >= 5) {
+    k = atoi(argv[4]);
   }
 
   FastText fasttext;
-  fasttext.loadModel(args[2]);
+  fasttext.loadModel(std::string(argv[2]));
 
-  std::string infile = args[3];
+  std::string infile(argv[3]);
   if (infile == "-") {
     fasttext.test(std::cin, k);
   } else {
@@ -135,21 +135,21 @@ void test(const std::vector<std::string>& args) {
   exit(0);
 }
 
-void predict(const std::vector<std::string>& args) {
-  if (args.size() < 4 || args.size() > 5) {
+void predict(int argc, char** argv) {
+  if (argc < 4 || argc > 5) {
     printPredictUsage();
     exit(EXIT_FAILURE);
   }
   int32_t k = 1;
-  if (args.size() >= 5) {
-    k = std::stoi(args[4]);
+  if (argc >= 5) {
+    k = atoi(argv[4]);
   }
 
-  bool print_prob = args[1] == "predict-prob";
+  bool print_prob = std::string(argv[1]) == "predict-prob";
   FastText fasttext;
-  fasttext.loadModel(std::string(args[2]));
+  fasttext.loadModel(std::string(argv[2]));
 
-  std::string infile(args[3]);
+  std::string infile(argv[3]);
   if (infile == "-") {
     fasttext.predict(std::cin, k, print_prob);
   } else {
@@ -165,103 +165,102 @@ void predict(const std::vector<std::string>& args) {
   exit(0);
 }
 
-void printWordVectors(const std::vector<std::string> args) {
-  if (args.size() != 3) {
+void printWordVectors(int argc, char** argv) {
+  if (argc != 3) {
     printPrintWordVectorsUsage();
     exit(EXIT_FAILURE);
   }
   FastText fasttext;
-  fasttext.loadModel(std::string(args[2]));
+  fasttext.loadModel(std::string(argv[2]));
   fasttext.printWordVectors();
   exit(0);
 }
 
-void printSentenceVectors(const std::vector<std::string> args) {
-  if (args.size() != 3) {
+void printSentenceVectors(int argc, char** argv) {
+  if (argc != 3) {
     printPrintSentenceVectorsUsage();
     exit(EXIT_FAILURE);
   }
   FastText fasttext;
-  fasttext.loadModel(std::string(args[2]));
+  fasttext.loadModel(std::string(argv[2]));
   fasttext.printSentenceVectors();
   exit(0);
 }
 
-void printNgrams(const std::vector<std::string> args) {
-  if (args.size() != 4) {
+void printNgrams(int argc, char** argv) {
+  if (argc != 4) {
     printPrintNgramsUsage();
     exit(EXIT_FAILURE);
   }
   FastText fasttext;
-  fasttext.loadModel(std::string(args[2]));
-  fasttext.ngramVectors(std::string(args[3]));
+  fasttext.loadModel(std::string(argv[2]));
+  fasttext.ngramVectors(std::string(argv[3]));
   exit(0);
 }
 
-void nn(const std::vector<std::string> args) {
+void nn(int argc, char** argv) {
   int32_t k;
-  if (args.size() == 3) {
+  if (argc == 3) {
     k = 10;
-  } else if (args.size() == 4) {
-    k = std::stoi(args[3]);
+  } else if (argc == 4) {
+    k = atoi(argv[3]);
   } else {
     printNNUsage();
     exit(EXIT_FAILURE);
   }
   FastText fasttext;
-  fasttext.loadModel(std::string(args[2]));
+  fasttext.loadModel(std::string(argv[2]));
   fasttext.nn(k);
   exit(0);
 }
 
-void analogies(const std::vector<std::string> args) {
+void analogies(int argc, char** argv) {
   int32_t k;
-  if (args.size() == 3) {
+  if (argc == 3) {
     k = 10;
-  } else if (args.size() == 4) {
-    k = std::stoi(args[3]);
+  } else if (argc == 4) {
+    k = atoi(argv[3]);
   } else {
     printAnalogiesUsage();
     exit(EXIT_FAILURE);
   }
   FastText fasttext;
-  fasttext.loadModel(std::string(args[2]));
+  fasttext.loadModel(std::string(argv[2]));
   fasttext.analogies(k);
   exit(0);
 }
 
-void train(const std::vector<std::string> args) {
+void train(int argc, char** argv) {
   std::shared_ptr<Args> a = std::make_shared<Args>();
-  a->parseArgs(args);
+  a->parseArgs(argc, argv);
   FastText fasttext;
   fasttext.train(a);
 }
 
 int main(int argc, char** argv) {
-  std::vector<std::string> args(argv, argv + argc);
-  if (args.size() < 2) {
+  if (argc < 2) {
     printUsage();
     exit(EXIT_FAILURE);
   }
-  std::string command(args[1]);
+  std::string command(argv[1]);
   if (command == "skipgram" || command == "cbow" || command == "supervised") {
-    train(args);
+    train(argc, argv);
   } else if (command == "test") {
-    test(args);
+    test(argc, argv);
   } else if (command == "quantize") {
-    quantize(args);
+    quantize(argc, argv);
   } else if (command == "print-word-vectors") {
-    printWordVectors(args);
+    printWordVectors(argc, argv);
   } else if (command == "print-sentence-vectors") {
-    printSentenceVectors(args);
+    printSentenceVectors(argc, argv);
   } else if (command == "print-ngrams") {
-    printNgrams(args);
+    printNgrams(argc, argv);
   } else if (command == "nn") {
-    nn(args);
+    nn(argc, argv);
   } else if (command == "analogies") {
-    analogies(args);
+    analogies(argc, argv);
   } else if (command == "predict" || command == "predict-prob" ) {
-    predict(args);
+    predict(argc, argv);
   } else {
     printUsage();
     exit(EXIT_FAILURE);

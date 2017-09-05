@@ -376,16 +376,11 @@ void FastText::sentenceVectors() {
     int32_t count = 0;
     while(iss >> word) {
       getVector(vec, word);
-      real norm = vec.norm();
-      if (norm > 0) {
-        vec.mul(1.0 / norm);
-        svec.addVector(vec);
-        count++;
-      }
+      vec.mul(1.0 / vec.norm());
+      svec.addVector(vec);
+      count++;
     }
-    if (count > 0) {
-      svec.mul(1.0 / count);
-    }
+    svec.mul(1.0 / count);
     std::cout << sentence << " " << svec << std::endl;
   }
 }
@@ -435,16 +430,14 @@ void FastText::printSentenceVectors() {
 void FastText::precomputeWordVectors(Matrix& wordVectors) {
   Vector vec(args_->dim);
   wordVectors.zero();
-  std::cerr << "Pre-computing word vectors...";
+  std::cout << "Pre-computing word vectors...";
   for (int32_t i = 0; i < dict_->nwords(); i++) {
     std::string word = dict_->getWord(i);
     getVector(vec, word);
     real norm = vec.norm();
-    if (norm > 0) {
-      wordVectors.addRow(vec, i, 1.0 / norm);
-    }
+    wordVectors.addRow(vec, i, 1.0 / norm);
   }
-  std::cerr << " done." << std::endl;
+  std::cout << " done." << std::endl;
 }
 
 void FastText::findNN(const Matrix& wordVectors, const Vector& queryVec,
@@ -641,9 +634,11 @@ void FastText::train(std::shared_ptr<Args> args) {
   model_ = std::make_shared<Model>(input_, output_, args_, 0);
 
   saveModel();
-  saveVectors();
-  if (args_->saveOutput > 0) {
-    saveOutput();
+  if (args_->model != model_name::sup) {
+    saveVectors();
+    if (args_->saveOutput > 0) {
+      saveOutput();
+    }
   }
 }
 
