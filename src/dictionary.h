@@ -34,7 +34,7 @@ struct entry {
 };
 
 class Dictionary {
-  private:
+  protected:
     static const int32_t MAX_VOCAB_SIZE = 30000000;
     static const int32_t MAX_LINE_SIZE = 1024;
 
@@ -42,6 +42,9 @@ class Dictionary {
     int32_t find(const std::string&, uint32_t h) const;
     void initTableDiscard();
     void initNgrams();
+    void reset(std::istream&) const;
+    void pushHash(std::vector<int32_t>&, int32_t) const;
+    void addSubwords(std::vector<int32_t>&, const std::string&, int32_t) const;
 
     std::shared_ptr<Args> args_;
     std::vector<int32_t> word2int_;
@@ -95,12 +98,13 @@ class Dictionary {
     void save(std::ostream&) const;
     void load(std::istream&);
     std::vector<int64_t> getCounts(entry_type) const;
-    int32_t getLine(std::istream&, std::vector<int32_t>&, std::vector<int32_t>&,
-                    std::vector<int32_t>&, std::minstd_rand&) const;
     int32_t getLine(std::istream&, std::vector<int32_t>&,
                     std::vector<int32_t>&, std::minstd_rand&) const;
+    int32_t getLine(std::istream&, std::vector<int32_t>&,
+                    std::minstd_rand&) const;
     void threshold(int64_t, int64_t);
     void prune(std::vector<int32_t>&);
+    bool isPruned() { return pruneidx_size_ >= 0; }
 };
 
 }
