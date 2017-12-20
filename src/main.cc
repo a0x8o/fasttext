@@ -8,7 +8,6 @@
  */
 
 #include <iostream>
-
 #include "fasttext.h"
 #include "args.h"
 
@@ -30,6 +29,7 @@ void printUsage() {
     << "  print-ngrams            print ngrams given a trained model and word\n"
     << "  nn                      query for nearest neighbors\n"
     << "  analogies               query for analogies\n"
+    << "  dump                    dump arguments,dictionary,input/output vectors\n"
     << std::endl;
 }
 
@@ -80,16 +80,16 @@ void printPrintNgramsUsage() {
 }
 
 void quantize(const std::vector<std::string>& args) {
-  std::shared_ptr<Args> a = std::make_shared<Args>();
+  Args a = Args();
   if (args.size() < 3) {
     printQuantizeUsage();
-    a->printHelp();
+    a.printHelp();
     exit(EXIT_FAILURE);
   }
-  a->parseArgs(args);
+  a.parseArgs(args);
   FastText fasttext;
   // parseArgs checks if a->output is given.
-  fasttext.loadModel(a->output + ".bin");
+  fasttext.loadModel(a.output + ".bin");
   fasttext.quantize(a);
   fasttext.saveModel();
   exit(0);
@@ -108,6 +108,14 @@ void printAnalogiesUsage() {
     << "usage: fasttext analogies <model> <k>\n\n"
     << "  <model>      model filename\n"
     << "  <k>          (optional; 10 by default) predict top k labels\n"
+    << std::endl;
+}
+
+void printDumpUsage() {
+  std::cout
+    << "usage: fasttext dump <model> <option>\n\n"
+    << "  <model>      model filename\n"
+    << "  <option>     option from args,dict,input,output"
     << std::endl;
 }
 
@@ -245,14 +253,39 @@ void analogies(const std::vector<std::string> args) {
 }
 
 void train(const std::vector<std::string> args) {
-  std::shared_ptr<Args> a = std::make_shared<Args>();
-  a->parseArgs(args);
+  Args a = Args();
+  a.parseArgs(args);
   FastText fasttext;
   fasttext.train(a);
   fasttext.saveModel();
   fasttext.saveVectors();
-  if (a->saveOutput) {
+  if (a.saveOutput) {
     fasttext.saveOutput();
+  }
+}
+
+void dump(const std::vector<std::string>& args) {
+  if (args.size() < 4) {
+    printDumpUsage();
+    exit(EXIT_FAILURE);
+  }
+
+  std::string modelPath = args[2];
+  std::string option = args[3];
+
+  FastText fasttext;
+  fasttext.loadModel(modelPath);
+  if (option == "args") {
+    fasttext.dumpArgs();
+  } else if (option == "dict") {
+    fasttext.dumpDict();
+  } else if (option == "input") {
+    fasttext.dumpInput();
+  } else if (option == "output") {
+    fasttext.dumpOutput();
+  } else {
+    printDumpUsage();
+    exit(EXIT_FAILURE);
   }
 }
 
@@ -281,6 +314,8 @@ int main(int argc, char** argv) {
     analogies(args);
   } else if (command == "predict" || command == "predict-prob" ) {
     predict(args);
+  } else if (command == "dump") {
+    dump(args);
   } else {
     printUsage();
     exit(EXIT_FAILURE);
