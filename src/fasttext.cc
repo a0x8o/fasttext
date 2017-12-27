@@ -15,7 +15,6 @@
 #include <thread>
 #include <string>
 #include <vector>
-#include <queue>
 #include <algorithm>
 #include <stdexcept>
 #include <numeric>
@@ -194,7 +193,6 @@ void FastText::loadModel(const std::string& filename) {
 
 void FastText::loadModel(std::istream& in) {
   args_ = std::make_shared<Args>();
-  dict_ = std::make_shared<Dictionary>(args_);
   input_ = std::make_shared<Matrix>();
   output_ = std::make_shared<Matrix>();
   qinput_ = std::make_shared<QMatrix>();
@@ -204,7 +202,7 @@ void FastText::loadModel(std::istream& in) {
     // backward compatibility: old supervised models do not use char ngrams.
     args_->maxn = 0;
   }
-  dict_->load(in);
+  dict_ = std::make_shared<Dictionary>(args_, in);
 
   bool quant_input;
   in.read((char*) &quant_input, sizeof(bool));
@@ -361,13 +359,15 @@ void FastText::skipgram(Model& model, real lr,
   }
 }
 
-void FastText::test(std::istream& in, int32_t k) {
+std::tuple<int64_t, double, double> FastText::test(
+    std::istream& in,
+    int32_t k) {
   int32_t nexamples = 0, nlabels = 0;
   double precision = 0.0;
   std::vector<int32_t> line, labels;
 
   while (in.peek() != EOF) {
-    dict_->getLine(in, line, labels, model_->rng);
+    dict_->getLine(in, line, labels);
     if (labels.size() > 0 && line.size() > 0) {
       std::vector<std::pair<real, int32_t>> modelPredictions;
       model_->predict(line, k, modelPredictions);
@@ -380,18 +380,15 @@ void FastText::test(std::istream& in, int32_t k) {
       nlabels += labels.size();
     }
   }
-  std::cout << "N" << "\t" << nexamples << std::endl;
-  std::cout << std::setprecision(3);
-  std::cout << "P@" << k << "\t" << precision / (k * nexamples) << std::endl;
-  std::cout << "R@" << k << "\t" << precision / nlabels << std::endl;
-  std::cerr << "Number of examples: " << nexamples << std::endl;
+  return std::tuple<int64_t, double, double>(
+      nexamples, precision / (k * nexamples), precision / nlabels);
 }
 
 void FastText::predict(std::istream& in, int32_t k,
                        std::vector<std::pair<real,std::string>>& predictions) const {
   std::vector<int32_t> words, labels;
   predictions.clear();
-  dict_->getLine(in, words, labels, model_->rng);
+  dict_->getLine(in, words, labels);
   predictions.clear();
   if (words.empty()) return;
   Vector hidden(args_->dim);
@@ -431,7 +428,7 @@ void FastText::getSentenceVector(
   svec.zero();
   if (args_->model == model_name::sup) {
     std::vector<int32_t> line, labels;
-    dict_->getLine(in, line, labels, model_->rng);
+    dict_->getLine(in, line, labels);
     for (int32_t i = 0; i < line.size(); i++) {
       addInputVector(svec, line[i]);
     }
@@ -481,7 +478,6 @@ void FastText::ngramVectors(std::string word) {
 void FastText::precomputeWordVectors(Matrix& wordVectors) {
   Vector vec(args_->dim);
   wordVectors.zero();
-  std::cerr << "Pre-computing word vectors...";
   for (int32_t i = 0; i < dict_->nwords(); i++) {
     std::string word = dict_->getWord(i);
     getWordVector(vec, word);
@@ -490,16 +486,20 @@ void FastText::precomputeWordVectors(Matrix& wordVectors) {
       wordVectors.addRow(vec, i, 1.0 / norm);
     }
   }
-  std::cerr << " done." << std::endl;
 }
 
-void FastText::findNN(const Matrix& wordVectors, const Vector& queryVec,
-                      int32_t k, const std::set<std::string>& banSet) {
+void FastText::findNN(
+    const Matrix& wordVectors,
+    const Vector& queryVec,
+    int32_t k,
+    const std::set<std::string>& banSet,
+    std::vector<std::pair<real, std::string>>& results) {
+  results.clear();
+  std::priority_queue<std::pair<real, std::string>> heap;
   real queryNorm = queryVec.norm();
   if (std::abs(queryNorm) < 1e-8) {
     queryNorm = 1;
   }
-  std::priority_queue<std::pair<real, std::string>> heap;
   Vector vec(args_->dim);
   for (int32_t i = 0; i < dict_->nwords(); i++) {
     std::string word = dict_->getWord(i);
@@ -510,26 +510,10 @@ void FastText::findNN(const Matrix& wordVectors, const Vector& queryVec,
   while (i < k && heap.size() > 0) {
     auto it = banSet.find(heap.top().second);
     if (it == banSet.end()) {
-      std::cout << heap.top().second << " " << heap.top().first << std::endl;
+      results.push_back(std::pair<real, std::string>(heap.top().first, heap.top().second));
       i++;
     }
     heap.pop();
-  }
-}
-
-void FastText::nn(int32_t k) {
-  std::string queryWord;
-  Vector queryVec(args_->dim);
-  Matrix wordVectors(dict_->nwords(), args_->dim);
-  precomputeWordVectors(wordVectors);
-  std::set<std::string> banSet;
-  std::cout << "Query word? ";
-  while (std::cin >> queryWord) {
-    banSet.clear();
-    banSet.insert(queryWord);
-    getWordVector(queryVec, queryWord);
-    findNN(wordVectors, queryVec, k, banSet);
-    std::cout << "Query word? ";
   }
 }
 
@@ -540,6 +524,7 @@ void FastText::analogies(int32_t k) {
   precomputeWordVectors(wordVectors);
   std::set<std::string> banSet;
   std::cout << "Query triplet (A - B + C)? ";
+  std::vector<std::pair<real, std::string>> results;
   while (true) {
     banSet.clear();
     query.zero();
@@ -556,7 +541,10 @@ void FastText::analogies(int32_t k) {
     getWordVector(buffer, word);
     query.addVector(buffer, 1.0);
 
-    findNN(wordVectors, query, k, banSet);
+    findNN(wordVectors, query, k, banSet, results);
+    for (auto& pair : results) {
+      std::cout << pair.second << " " << pair.first << std::endl;
+    }
     std::cout << "Query triplet (A - B + C)? ";
   }
 }
@@ -579,7 +567,7 @@ void FastText::trainThread(int32_t threadId) {
     real progress = real(tokenCount_) / (args_->epoch * ntokens);
     real lr = args_->lr * (1.0 - progress);
     if (args_->model == model_name::sup) {
-      localTokenCount += dict_->getLine(ifs, line, labels, model.rng);
+      localTokenCount += dict_->getLine(ifs, line, labels);
       supervised(model, lr, line, labels);
     } else if (args_->model == model_name::cbow) {
       localTokenCount += dict_->getLine(ifs, line, model.rng);
@@ -710,30 +698,6 @@ int FastText::getDimension() const {
 
 bool FastText::isQuant() const {
   return quant_;
-}
-
-void FastText::dumpArgs() const {
-  args_->dump(std::cout);
-}
-
-void FastText::dumpDict() const {
-  dict_->dump(std::cout);
-}
-
-void FastText::dumpInput() const {
-  if (quant_) {
-    std::cerr << "Not supported for quantized models." << std::endl;
-  } else {
-    input_->dump(std::cout);
-  }
-}
-
-void FastText::dumpOutput() const {
-  if (quant_) {
-    std::cerr << "Not supported for quantized models." << std::endl;
-  } else {
-    output_->dump(std::cout);
-  }
 }
 
 }

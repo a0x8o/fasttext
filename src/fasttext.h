@@ -16,6 +16,8 @@
 #include <set>
 #include <chrono>
 #include <iostream>
+#include <queue>
+#include <tuple>
 
 #include "args.h"
 #include "dictionary.h"
@@ -91,7 +93,7 @@ class FastText {
   std::vector<int32_t> selectEmbeddings(int32_t) const;
   void getSentenceVector(std::istream&, Vector&);
   void quantize(const Args);
-  void test(std::istream&, int32_t);
+  std::tuple<int64_t, double, double> test(std::istream&, int32_t);
   void predict(std::istream&, int32_t, bool);
   void predict(
       std::istream&,
@@ -99,9 +101,12 @@ class FastText {
       std::vector<std::pair<real, std::string>>&) const;
   void ngramVectors(std::string);
   void precomputeWordVectors(Matrix&);
-  void
-  findNN(const Matrix&, const Vector&, int32_t, const std::set<std::string>&);
-  void nn(int32_t);
+  void findNN(
+      const Matrix&,
+      const Vector&,
+      int32_t,
+      const std::set<std::string>&,
+      std::vector<std::pair<real, std::string>>& results);
   void analogies(int32_t);
   void trainThread(int32_t);
   void train(const Args);
@@ -109,10 +114,5 @@ class FastText {
   void loadVectors(std::string);
   int getDimension() const;
   bool isQuant() const;
-
-  void dumpArgs() const;
-  void dumpDict() const;
-  void dumpInput() const;
-  void dumpOutput() const;
 };
 }

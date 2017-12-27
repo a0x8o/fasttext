@@ -8,6 +8,8 @@
  */
 
 #include <iostream>
+#include <queue>
+#include <iomanip>
 #include "fasttext.h"
 #include "args.h"
 
@@ -132,19 +134,24 @@ void test(const std::vector<std::string>& args) {
   FastText fasttext;
   fasttext.loadModel(args[2]);
 
+  std::tuple<int64_t, double, double> result;
   std::string infile = args[3];
   if (infile == "-") {
-    fasttext.test(std::cin, k);
+    result = fasttext.test(std::cin, k);
   } else {
     std::ifstream ifs(infile);
     if (!ifs.is_open()) {
       std::cerr << "Test file cannot be opened!" << std::endl;
       exit(EXIT_FAILURE);
     }
-    fasttext.test(ifs, k);
+    result = fasttext.test(ifs, k);
     ifs.close();
   }
-  exit(0);
+  std::cout << "N" << "\t" << std::get<0>(result) << std::endl;
+  std::cout << std::setprecision(3);
+  std::cout << "P@" << k << "\t" << std::get<1>(result) << std::endl;
+  std::cout << "R@" << k << "\t" << std::get<2>(result) << std::endl;
+  std::cerr << "Number of examples: " << std::get<0>(result) << std::endl;
 }
 
 void predict(const std::vector<std::string>& args) {
@@ -232,7 +239,26 @@ void nn(const std::vector<std::string> args) {
   }
   FastText fasttext;
   fasttext.loadModel(std::string(args[2]));
-  fasttext.nn(k);
+  std::string queryWord;
+  std::shared_ptr<const Dictionary> dict = fasttext.getDictionary();
+  Vector queryVec(fasttext.getDimension());
+  Matrix wordVectors(dict->nwords(), fasttext.getDimension());
+  std::cerr << "Pre-computing word vectors...";
+  fasttext.precomputeWordVectors(wordVectors);
+  std::cerr << " done." << std::endl;
+  std::set<std::string> banSet;
+  std::cout << "Query word? ";
+  std::vector<std::pair<real, std::string>> results;
+  while (std::cin >> queryWord) {
+    banSet.clear();
+    banSet.insert(queryWord);
+    fasttext.getWordVector(queryVec, queryWord);
+    fasttext.findNN(wordVectors, queryVec, k, banSet, results);
+    for (auto& pair : results) {
+      std::cout << pair.second << " " << pair.first << std::endl;
+    }
+    std::cout << "Query word? ";
+  }
   exit(0);
 }
 
@@ -276,13 +302,21 @@ void dump(const std::vector<std::string>& args) {
   FastText fasttext;
   fasttext.loadModel(modelPath);
   if (option == "args") {
-    fasttext.dumpArgs();
+    fasttext.getArgs().dump(std::cout);
   } else if (option == "dict") {
-    fasttext.dumpDict();
+    fasttext.getDictionary()->dump(std::cout);
   } else if (option == "input") {
-    fasttext.dumpInput();
+    if (fasttext.isQuant()) {
+      std::cerr << "Not supported for quantized models." << std::endl;
+    } else {
+      fasttext.getInputMatrix()->dump(std::cout);
+    }
   } else if (option == "output") {
-    fasttext.dumpOutput();
+    if (fasttext.isQuant()) {
+      std::cerr << "Not supported for quantized models." << std::endl;
+    } else {
+      fasttext.getOutputMatrix()->dump(std::cout);
+    }
   } else {
     printDumpUsage();
     exit(EXIT_FAILURE);
