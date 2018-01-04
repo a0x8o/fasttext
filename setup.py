@@ -18,7 +18,7 @@ import sys
 import setuptools
 import os
 
-__version__ = '0.0.6'
+__version__ = '0.8.22'
 FASTTEXT_SRC = "src"
 
 # Based on https://github.com/pybind/python_example
@@ -66,7 +66,7 @@ ext_modules = [
 
 # As of Python 3.6, CCompiler has a `has_flag` method.
 # cf http://bugs.python.org/issue26689
-def has_flag(compiler, flagname):
+def has_flag(compiler, flags):
     """Return a boolean indicating whether a flag name is supported on
     the specified compiler.
     """
@@ -74,7 +74,7 @@ def has_flag(compiler, flagname):
     with tempfile.NamedTemporaryFile('w', suffix='.cpp') as f:
         f.write('int main (int argc, char **argv) { return 0; }')
         try:
-            compiler.compile([f.name], extra_postargs=[flagname])
+            compiler.compile([f.name], extra_postargs=flags)
         except setuptools.distutils.errors.CompileError:
             return False
     return True
@@ -84,17 +84,14 @@ def cpp_flag(compiler):
     """Return the -std=c++[0x/11/14] compiler flag.
     The c++14 is preferred over c++0x/11 (when it is available).
     """
-    if has_flag(compiler, '-std=c++14'):
-        return '-std=c++14'
-    elif has_flag(compiler, '-std=c++11'):
-        return '-std=c++11'
-    elif has_flag(compiler, '-std=c++0x'):
-        return '-std=c++0x'
-    else:
-        raise RuntimeError(
-            'Unsupported compiler -- at least C++0x support '
-            'is needed!'
-        )
+    standards = ['-std=c++14', '-std=c++11', '-std=c++0x']
+    for standard in standards:
+        if has_flag(compiler, [standard]):
+            return standard
+    raise RuntimeError(
+        'Unsupported compiler -- at least C++0x support '
+        'is needed!'
+    )
 
 
 class BuildExt(build_ext):
@@ -106,15 +103,22 @@ class BuildExt(build_ext):
 
     def build_extensions(self):
         if sys.platform == 'darwin':
-            if has_flag(self.compiler, '-stdlib=libc++'):
-                self.c_opts['unix'] += ['-stdlib=libc++']
-            self.c_opts['unix'] += ['-mmacosx-version-min=10.7']
+            all_flags = ['-stdlib=libc++', '-mmacosx-version-min=10.7']
+            if has_flag(self.compiler, [all_flags[0]]):
+                self.c_opts['unix'] += [all_flags[0]]
+            elif has_flag(self.compiler, all_flags):
+                self.c_opts['unix'] += all_flags
+            else:
+                raise RuntimeError(
+                    'libc++ is needed! Failed to compile with {} and {}.'.
+                    format(" ".join(all_flags), all_flags[0])
+                )
         ct = self.compiler.compiler_type
         opts = self.c_opts.get(ct, [])
         if ct == 'unix':
             opts.append('-DVERSION_INFO="%s"' % self.distribution.get_version())
             opts.append(cpp_flag(self.compiler))
-            if has_flag(self.compiler, '-fvisibility=hidden'):
+            if has_flag(self.compiler, ['-fvisibility=hidden']):
                 opts.append('-fvisibility=hidden')
         elif ct == 'msvc':
             opts.append(
@@ -125,16 +129,41 @@ class BuildExt(build_ext):
         build_ext.build_extensions(self)
 
 
+def _get_readme():
+    """
+    Use pandoc to generate rst from md.
+    pandoc --from=markdown --to=rst --output=python/README.rst python/README.md
+    """
+    with open("python/README.rst") as fid:
+        return fid.read()
+
+
 setup(
     name='fasttext',
     version=__version__,
     author='Christian Puhrsch',
     author_email='cpuhrsch@fb.com',
     description='fastText Python bindings',
-    long_description='',
+    long_description=_get_readme(),
     ext_modules=ext_modules,
     url='https://github.com/facebookresearch/fastText',
     license='BSD',
+    classifiers=[
+        'Development Status :: 3 - Alpha',
+        'Intended Audience :: Developers',
+        'Intended Audience :: Science/Research',
+        'License :: OSI Approved :: MIT License',
+        'Programming Language :: Python :: 2.7',
+        'Programming Language :: Python :: 3.4',
+        'Programming Language :: Python :: 3.5',
+        'Programming Language :: Python :: 3.6',
+        'Topic :: Software Development',
+        'Topic :: Scientific/Engineering',
+        'Operating System :: Microsoft :: Windows',
+        'Operating System :: POSIX',
+        'Operating System :: Unix',
+        'Operating System :: MacOS',
+    ],
     install_requires=['pybind11>=2.2', "setuptools >= 0.7.0", "numpy"],
     cmdclass={'build_ext': BuildExt},
     packages=[
