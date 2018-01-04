@@ -7,17 +7,17 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  */
 
-#ifndef FASTTEXT_FASTTEXT_H
-#define FASTTEXT_FASTTEXT_H
-
-#define FASTTEXT_VERSION 12 /* Version 1b */
-#define FASTTEXT_FILEFORMAT_MAGIC_INT32 793712314
+#pragma once
 
 #include <time.h>
 
 #include <atomic>
 #include <memory>
 #include <set>
+#include <chrono>
+#include <iostream>
+#include <queue>
+#include <tuple>
 
 #include "args.h"
 #include "dictionary.h"
@@ -43,8 +43,10 @@ class FastText {
 
   std::shared_ptr<Model> model_;
 
-  std::atomic<int64_t> tokenCount;
-  clock_t start;
+  std::atomic<int64_t> tokenCount_;
+  std::atomic<real> loss_;
+
+  clock_t start_;
   void signModel(std::ostream&);
   bool checkModel(std::istream&);
 
@@ -79,7 +81,7 @@ class FastText {
   void saveModel();
   void loadModel(std::istream&);
   void loadModel(const std::string&);
-  void printInfo(real, real);
+  void printInfo(real, real, std::ostream&);
 
   void supervised(
       Model&,
@@ -90,8 +92,8 @@ class FastText {
   void skipgram(Model&, real, const std::vector<int32_t>&);
   std::vector<int32_t> selectEmbeddings(int32_t) const;
   void getSentenceVector(std::istream&, Vector&);
-  void quantize(std::shared_ptr<Args>);
-  void test(std::istream&, int32_t);
+  void quantize(const Args);
+  std::tuple<int64_t, double, double> test(std::istream&, int32_t);
   void predict(std::istream&, int32_t, bool);
   void predict(
       std::istream&,
@@ -99,17 +101,18 @@ class FastText {
       std::vector<std::pair<real, std::string>>&) const;
   void ngramVectors(std::string);
   void precomputeWordVectors(Matrix&);
-  void
-  findNN(const Matrix&, const Vector&, int32_t, const std::set<std::string>&);
-  void nn(int32_t);
+  void findNN(
+      const Matrix&,
+      const Vector&,
+      int32_t,
+      const std::set<std::string>&,
+      std::vector<std::pair<real, std::string>>& results);
   void analogies(int32_t);
   void trainThread(int32_t);
-  void train(std::shared_ptr<Args>);
+  void train(const Args);
 
   void loadVectors(std::string);
   int getDimension() const;
   bool isQuant() const;
 };
-
-} // namespace fasttext
-#endif
+}

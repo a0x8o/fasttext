@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <iostream>
 #include <numeric>
+#include <stdexcept>
 
 namespace fasttext {
 
@@ -118,33 +119,34 @@ void ProductQuantizer::kmeans(const real *x, real* c, int32_t n, int32_t d) {
   for (auto i = 0; i < ksub_; i++) {
     memcpy (&c[i * d], x + perm[i] * d, d * sizeof(real));
   }
-  uint8_t* codes = new uint8_t[n];
+  auto codes = std::vector<uint8_t>(n);
   for (auto i = 0; i < niter_; i++) {
-    Estep(x, c, codes, d, n);
-    MStep(x, c, codes, d, n);
+    Estep(x, c, codes.data(), d, n);
+    MStep(x, c, codes.data(), d, n);
   }
-  delete [] codes;
 }
 
 void ProductQuantizer::train(int32_t n, const real * x) {
   if (n < ksub_) {
-    std::cerr<<"Matrix too small for quantization, must have > 256 rows"<<std::endl;
-    exit(1);
+    throw std::invalid_argument(
+        "Matrix too small for quantization, must have at least " + std::to_string(ksub_) + " rows");
   }
   std::vector<int32_t> perm(n, 0);
   std::iota(perm.begin(), perm.end(), 0);
   auto d = dsub_;
   auto np = std::min(n, max_points_);
-  real* xslice = new real[np * dsub_];
+  auto xslice = std::vector<real>(np * dsub_);
   for (auto m = 0; m < nsubq_; m++) {
     if (m == nsubq_-1) {d = lastdsub_;}
     if (np != n) {std::shuffle(perm.begin(), perm.end(), rng);}
     for (auto j = 0; j < np; j++) {
-      memcpy (xslice + j * d, x + perm[j] * dim_ + m * dsub_, d * sizeof(real));
+      memcpy(
+          xslice.data() + j * d,
+          x + perm[j] * dim_ + m * dsub_,
+          d * sizeof(real));
     }
-    kmeans(xslice, get_centroids(m, 0), np, d);
+    kmeans(xslice.data(), get_centroids(m, 0), np, d);
   }
-  delete [] xslice;
 }
 
 real ProductQuantizer::mulcode(const Vector& x, const uint8_t* codes,

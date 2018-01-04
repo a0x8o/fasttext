@@ -8,7 +8,8 @@
  */
 
 #include <iostream>
-
+#include <queue>
+#include <iomanip>
 #include "fasttext.h"
 #include "args.h"
 
@@ -27,8 +28,10 @@ void printUsage() {
     << "  cbow                    train a cbow model\n"
     << "  print-word-vectors      print word vectors given a trained model\n"
     << "  print-sentence-vectors  print sentence vectors given a trained model\n"
+    << "  print-ngrams            print ngrams given a trained model and word\n"
     << "  nn                      query for nearest neighbors\n"
     << "  analogies               query for analogies\n"
+    << "  dump                    dump arguments,dictionary,input/output vectors\n"
     << std::endl;
 }
 
@@ -79,16 +82,16 @@ void printPrintNgramsUsage() {
 }
 
 void quantize(const std::vector<std::string>& args) {
-  std::shared_ptr<Args> a = std::make_shared<Args>();
+  Args a = Args();
   if (args.size() < 3) {
     printQuantizeUsage();
-    a->printHelp();
+    a.printHelp();
     exit(EXIT_FAILURE);
   }
-  a->parseArgs(args);
+  a.parseArgs(args);
   FastText fasttext;
   // parseArgs checks if a->output is given.
-  fasttext.loadModel(a->output + ".bin");
+  fasttext.loadModel(a.output + ".bin");
   fasttext.quantize(a);
   fasttext.saveModel();
   exit(0);
@@ -110,6 +113,14 @@ void printAnalogiesUsage() {
     << std::endl;
 }
 
+void printDumpUsage() {
+  std::cout
+    << "usage: fasttext dump <model> <option>\n\n"
+    << "  <model>      model filename\n"
+    << "  <option>     option from args,dict,input,output"
+    << std::endl;
+}
+
 void test(const std::vector<std::string>& args) {
   if (args.size() < 4 || args.size() > 5) {
     printTestUsage();
@@ -123,19 +134,24 @@ void test(const std::vector<std::string>& args) {
   FastText fasttext;
   fasttext.loadModel(args[2]);
 
+  std::tuple<int64_t, double, double> result;
   std::string infile = args[3];
   if (infile == "-") {
-    fasttext.test(std::cin, k);
+    result = fasttext.test(std::cin, k);
   } else {
     std::ifstream ifs(infile);
     if (!ifs.is_open()) {
       std::cerr << "Test file cannot be opened!" << std::endl;
       exit(EXIT_FAILURE);
     }
-    fasttext.test(ifs, k);
+    result = fasttext.test(ifs, k);
     ifs.close();
   }
-  exit(0);
+  std::cout << "N" << "\t" << std::get<0>(result) << std::endl;
+  std::cout << std::setprecision(3);
+  std::cout << "P@" << k << "\t" << std::get<1>(result) << std::endl;
+  std::cout << "R@" << k << "\t" << std::get<2>(result) << std::endl;
+  std::cerr << "Number of examples: " << std::get<0>(result) << std::endl;
 }
 
 void predict(const std::vector<std::string>& args) {
@@ -223,7 +239,26 @@ void nn(const std::vector<std::string> args) {
   }
   FastText fasttext;
   fasttext.loadModel(std::string(args[2]));
-  fasttext.nn(k);
+  std::string queryWord;
+  std::shared_ptr<const Dictionary> dict = fasttext.getDictionary();
+  Vector queryVec(fasttext.getDimension());
+  Matrix wordVectors(dict->nwords(), fasttext.getDimension());
+  std::cerr << "Pre-computing word vectors...";
+  fasttext.precomputeWordVectors(wordVectors);
+  std::cerr << " done." << std::endl;
+  std::set<std::string> banSet;
+  std::cout << "Query word? ";
+  std::vector<std::pair<real, std::string>> results;
+  while (std::cin >> queryWord) {
+    banSet.clear();
+    banSet.insert(queryWord);
+    fasttext.getWordVector(queryVec, queryWord);
+    fasttext.findNN(wordVectors, queryVec, k, banSet, results);
+    for (auto& pair : results) {
+      std::cout << pair.second << " " << pair.first << std::endl;
+    }
+    std::cout << "Query word? ";
+  }
   exit(0);
 }
 
@@ -244,14 +279,47 @@ void analogies(const std::vector<std::string> args) {
 }
 
 void train(const std::vector<std::string> args) {
-  std::shared_ptr<Args> a = std::make_shared<Args>();
-  a->parseArgs(args);
+  Args a = Args();
+  a.parseArgs(args);
   FastText fasttext;
   fasttext.train(a);
   fasttext.saveModel();
   fasttext.saveVectors();
-  if (a->saveOutput > 0) {
+  if (a.saveOutput) {
     fasttext.saveOutput();
+  }
+}
+
+void dump(const std::vector<std::string>& args) {
+  if (args.size() < 4) {
+    printDumpUsage();
+    exit(EXIT_FAILURE);
+  }
+
+  std::string modelPath = args[2];
+  std::string option = args[3];
+
+  FastText fasttext;
+  fasttext.loadModel(modelPath);
+  if (option == "args") {
+    fasttext.getArgs().dump(std::cout);
+  } else if (option == "dict") {
+    fasttext.getDictionary()->dump(std::cout);
+  } else if (option == "input") {
+    if (fasttext.isQuant()) {
+      std::cerr << "Not supported for quantized models." << std::endl;
+    } else {
+      fasttext.getInputMatrix()->dump(std::cout);
+    }
+  } else if (option == "output") {
+    if (fasttext.isQuant()) {
+      std::cerr << "Not supported for quantized models." << std::endl;
+    } else {
+      fasttext.getOutputMatrix()->dump(std::cout);
+    }
+  } else {
+    printDumpUsage();
+    exit(EXIT_FAILURE);
   }
 }
 
@@ -280,6 +348,8 @@ int main(int argc, char** argv) {
     analogies(args);
   } else if (command == "predict" || command == "predict-prob" ) {
     predict(args);
+  } else if (command == "dump") {
+    dump(args);
   } else {
     printUsage();
     exit(EXIT_FAILURE);
